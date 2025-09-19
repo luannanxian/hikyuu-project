@@ -18,40 +18,94 @@ class MultiFactorEngine:
     def create_factor_indicator(self, expression: str) -> Indicator:
         """
         根据表达式创建技术指标
-        
+
         Args:
             expression: 因子表达式，如 "MA(CLOSE(), 5) - MA(CLOSE(), 20)"
-            
+
         Returns:
             Indicator: hikyuu指标对象
         """
         try:
+            # 安全检查：验证表达式
+            self._validate_expression(expression)
+
             # 构建安全的函数映射，使用正确的函数名称
             safe_context = {
                 'MA': MA, 'EMA': EMA, 'SMA': SMA, 'WMA': WMA,
                 'CLOSE': CLOSE, 'OPEN': OPEN, 'HIGH': HIGH, 'LOW': LOW,
                 'VOL': VOL, 'AMO': AMO,
-                'RSI': RSI, 'MACD': MACD, 'ATR': ATR, 'TA_BBANDS': TA_BBANDS,  # 使用TA_BBANDS而不是BOLL
+                'RSI': RSI, 'MACD': MACD, 'ATR': ATR, 'TA_BBANDS': TA_BBANDS,
                 'HHV': HHV, 'LLV': LLV, 'REF': REF, 'STD': STD,
                 'CROSS': CROSS, 'IF': IF, 'ABS': ABS, 'LOG': LOG, 'SQRT': SQRT
             }
-            
-            # 检查表达式中是否包含不安全的代码
-            if any(char in expression for char in ['import', 'exec', 'eval', '__']):
-                raise ValueError("表达式包含不安全字符")
-            
+
             # 执行表达式
-            indicator = eval(expression, safe_context)
+            indicator = eval(expression, {"__builtins__": {}}, safe_context)
             return indicator
-            
+
+        except ValueError as e:
+            # 表达式验证失败
+            logger.error(f"表达式验证失败: {e}")
+            raise
         except NameError as e:
             # 处理未定义的函数名
-            missing_function = str(e).split("'")[1]
+            missing_function = str(e).split("'")[1] if "'" in str(e) else "unknown"
             logger.error(f"函数未定义: {missing_function}，请检查函数名称是否正确")
             raise ValueError(f"未定义的函数: {missing_function}")
+        except SyntaxError as e:
+            logger.error(f"表达式语法错误: {expression}, 错误: {e}")
+            raise ValueError(f"表达式语法错误: {e}")
+        except TypeError as e:
+            logger.error(f"表达式类型错误: {expression}, 错误: {e}")
+            raise ValueError(f"表达式类型错误: {e}")
         except Exception as e:
-            logger.error(f"创建因子指标失败: {expression}, 错误: {e}")
-            raise
+            logger.error(f"创建因子指标失败: {expression}, 未知错误: {e}")
+            raise RuntimeError(f"创建因子指标失败: {e}")
+
+    def _validate_expression(self, expression: str) -> None:
+        """
+        验证因子表达式的安全性
+
+        Args:
+            expression: 待验证的表达式
+
+        Raises:
+            ValueError: 表达式不安全时抛出异常
+        """
+        if not expression or not isinstance(expression, str):
+            raise ValueError("表达式不能为空且必须为字符串")
+
+        # 清理表达式
+        expression = expression.strip()
+        if len(expression) > 1000:  # 限制表达式长度
+            raise ValueError("表达式过长，请保持在1000字符以内")
+
+        # 危险关键词检查
+        dangerous_keywords = [
+            'import', 'exec', 'eval', '__', 'open', 'file', 'input',
+            'raw_input', 'compile', 'globals', 'locals', 'dir', 'vars',
+            'getattr', 'setattr', 'delattr', 'hasattr', 'callable',
+            'exit', 'quit', 'help', 'copyright', 'credits', 'license'
+        ]
+
+        expression_lower = expression.lower()
+        for keyword in dangerous_keywords:
+            if keyword in expression_lower:
+                raise ValueError(f"表达式包含不安全的关键词: {keyword}")
+
+        # 检查是否包含危险字符组合
+        dangerous_patterns = ['..', '//', '\\\\', '${', '#{']
+        for pattern in dangerous_patterns:
+            if pattern in expression:
+                raise ValueError(f"表达式包含不安全的字符模式: {pattern}")
+
+        # 允许的字符集检查（字母、数字、运算符、括号、逗号、空格）
+        import re
+        allowed_pattern = r'^[a-zA-Z0-9_+\-*/().,\s<>=!&|]+$'
+        if not re.match(allowed_pattern, expression):
+            raise ValueError("表达式包含不允许的字符")
+
+        logger.debug(f"表达式验证通过: {expression}")
     
     def create_factor_safely(self, expression_parts: List[str]) -> Indicator:
         """

@@ -1,0 +1,22 @@
+# 核心依赖
+hikyuu>=2.6.5
+mysql-connector-python>=8.0.32
+schedule>=1.2.0
+
+# 数据处理
+pandas>=1.5.0
+numpy>=1.24.0
+
+# 日志和配置
+python-dotenv>=1.0.0
+
+# 开发和测试依赖（可选）
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=23.0.0
+flake8>=6.0.0
+
+# 注意：
+# 1. 此项目需要在conda环境 pybroker-313 中运行
+# 2. 安装命令：pip install -r requirements.txt
+# 3. hikyuu框架可能需要从特定源安装，请参考官方文档

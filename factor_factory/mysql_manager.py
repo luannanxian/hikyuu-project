@@ -1,5 +1,5 @@
 import mysql.connector
-from mysql.connector import Error, pooling
+from mysql.connector import Error, pooling, errors as mysql_errors
 from typing import List, Tuple, Optional, Dict, Any
 import logging
 from .config.database_config import DATABASE_CONFIG, CREATE_TABLES_SQL
@@ -40,9 +40,18 @@ class MySQLManager:
             connection.close()
             return True
             
-        except Error as e:
+        except mysql_errors.ProgrammingError as e:
+            if e.errno == 1044:  # Access denied error
+                logger.warning(f"没有创建数据库权限，尝试使用现有数据库: {e}")
+                return False
+            else:
+                logger.error(f"数据库操作错误: {e}")
+                raise
+        except mysql_errors.DatabaseError as e:
+            logger.error(f"数据库连接错误: {e}")
+            raise
+        except Exception as e:
             logger.error(f"确保数据库存在失败: {e}")
-            # 如果失败，可能用户没有创建数据库权限，继续尝试连接原有数据库
             return False
 
     def initialize_pool(self):
@@ -58,7 +67,13 @@ class MySQLManager:
                    if k not in ['pool_size', 'pool_name']}
             )
             logger.info("数据库连接池初始化成功")
-        except Error as e:
+        except mysql_errors.InterfaceError as e:
+            logger.error(f"数据库接口错误，请检查连接配置: {e}")
+            raise
+        except mysql_errors.DatabaseError as e:
+            logger.error(f"数据库连接错误，请检查数据库服务: {e}")
+            raise
+        except Exception as e:
             logger.error(f"数据库连接池初始化失败: {e}")
             raise
     
@@ -66,8 +81,11 @@ class MySQLManager:
         """从连接池获取连接"""
         try:
             return self.connection_pool.get_connection()
-        except Error as e:
-            logger.error(f"获取数据库连接失败: {e}")
+        except mysql_errors.PoolError as e:
+            logger.error(f"连接池错误: {e}")
+            raise
+        except mysql_errors.DatabaseError as e:
+            logger.error(f"数据库连接失败: {e}")
             raise
     
     def initialize_tables(self):
